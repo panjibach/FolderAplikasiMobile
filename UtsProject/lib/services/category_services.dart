@@ -1,168 +1,177 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:utsproject/models/category.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
+import '../models/category.dart' as CategoryModel; // ✅ Gunakan alias
+import 'api_service.dart';
+import 'auth_services.dart';
+import '../main.dart' show navigatorKey;
 
 class CategoryService extends ChangeNotifier {
-  // Singleton pattern
-  static final CategoryService _instance = CategoryService._internal();
+  final ApiService _apiService = ApiService();
+  
+  List<CategoryModel.Category> _categories = []; // ✅ Gunakan alias
+  bool _isLoading = false;
+  String? _error;
 
-  factory CategoryService() => _instance;
-  CategoryService._internal();
+  List<CategoryModel.Category> get categories => _categories;
+  bool get isLoading => _isLoading;
+  String? get error => _error;
 
-  final List<Category> _categories = [];
-  // Gunakan 10.0.2.2 untuk emulator Android
-  final String baseUrl = 'http://localhost:8081/api/categories';
+  // Get all categories (not deleted)
+  List<CategoryModel.Category> getCategories() {
+    return _categories.where((category) => !category.isDeleted).toList();
+  }
 
-  List<Category> get categories => _categories;
+  // Get expense categories
+  List<CategoryModel.Category> getExpenseCategories() {
+    return _categories.where((category) => category.isExpense && !category.isDeleted).toList();
+  }
 
+  // Get income categories
+  List<CategoryModel.Category> getIncomeCategories() {
+    return _categories.where((category) => !category.isExpense && !category.isDeleted).toList();
+  }
+
+  // Get category by ID
+  CategoryModel.Category? getCategoryById(int categoryId) {
+    try {
+      return _categories.firstWhere((category) => category.categoryId == categoryId);
+    } catch (e) {
+      print('Category with ID $categoryId not found');
+      return null;
+    }
+  }
+
+  // Fetch all categories
   Future<void> fetchCategories() async {
+    print('🔄 Starting fetchCategories...');
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
     try {
-      print('===== FETCH CATEGORIES START =====');
-      print('URL: $baseUrl');
+      final context = navigatorKey.currentContext;
+      if (context == null) {
+        throw Exception('Context not available');
+      }
 
-      final response = await http.get(Uri.parse(baseUrl));
-      print('Fetch Categories Response: ${response.statusCode}');
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final userId = authService.userId;
+      
+      print('👤 Current userId: $userId');
+      
+      if (userId == null) {
+        throw Exception('User not logged in');
+      }
 
-      if (response.statusCode == 200) {
-        print('Response body length: ${response.body.length}');
-        print('Response body preview: ${response.body.substring(0, min(100, response.body.length))}...');
+      _categories = await _apiService.getCategories(userId);
+      _error = null;
+      
+      print('✅ Fetched ${_categories.length} categories');
+      
+      // Debug: print first few categories
+      for (int i = 0; i < (_categories.length > 3 ? 3 : _categories.length); i++) {
+        final c = _categories[i];
+        print('  Category $i: ${c.categoryName} - ${c.isExpense ? 'Expense' : 'Income'}');
+      }
+      
+    } catch (e) {
+      _error = e.toString();
+      print('❌ Error fetching categories: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
-        final List data = json.decode(response.body);
-        print('Parsed Categories: $data');
+  // Create new category
+  Future<CategoryModel.Category> createCategory(String categoryName, bool isExpense) async {
+    try {
+      final context = navigatorKey.currentContext;
+      if (context == null) {
+        throw Exception('Context not available');
+      }
 
-        _categories.clear();
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final userId = authService.userId;
+      
+      if (userId == null) {
+        throw Exception('User not logged in');
+      }
 
-        // Proses setiap item satu per satu untuk menangkap error individual
-        for (var item in data) {
-          try {
-            final category = Category.fromJson(item);
-            _categories.add(category);
-          } catch (e) {
-            print('Error parsing category: $e, data: $item');
-            // Lanjutkan ke item berikutnya
-          }
-        }
+      final category = await _apiService.createCategory(categoryName, isExpense, userId);
+      _categories.add(category);
+      notifyListeners();
+      
+      return category;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
 
-        print('Loaded Categories: ${_categories.map((c) => c.name).toList()}');
+  // Update category
+  Future<CategoryModel.Category> updateCategory(int categoryId, String categoryName, bool isExpense) async {
+    try {
+      final context = navigatorKey.currentContext;
+      if (context == null) {
+        throw Exception('Context not available');
+      }
+
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final userId = authService.userId;
+      
+      if (userId == null) {
+        throw Exception('User not logged in');
+      }
+
+      final updatedCategory = await _apiService.updateCategory(categoryId, categoryName, isExpense, userId);
+      
+      final index = _categories.indexWhere((c) => c.categoryId == categoryId);
+      if (index != -1) {
+        _categories[index] = updatedCategory;
         notifyListeners();
-      } else {
-        print('HTTP error: ${response.statusCode}');
-        print('Error body: ${response.body}');
-        throw Exception('Gagal mengambil data kategori: ${response.statusCode}');
       }
-      print('===== FETCH CATEGORIES END =====');
+      
+      return updatedCategory;
     } catch (e) {
-      print('Fetch Categories Error: $e');
-      throw Exception('Gagal terhubung ke server: $e');
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
     }
   }
 
-  Future<void> addCategory(Category category) async {
+  // Delete category
+  Future<void> deleteCategory(int categoryId) async {
     try {
-      print('Adding category: ${category.name}, isExpense: ${category.isExpense}');
-
-      final response = await http.post(
-        Uri.parse(baseUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(category.toJson()),
-      );
-
-      print('Add category response: ${response.statusCode} - ${response.body}');
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final newCategory = Category.fromJson(json.decode(response.body));
-        _categories.add(newCategory);
-        notifyListeners();
-      } else {
-        throw Exception('Gagal menambahkan kategori: ${response.statusCode} - ${response.body}');
+      final context = navigatorKey.currentContext;
+      if (context == null) {
+        throw Exception('Context not available');
       }
-    } catch (e) {
-      print('Add Category Error: $e');
-      throw Exception('Gagal terhubung ke server: $e');
-    }
-  }
 
-  Future<void> deleteCategory(int id) async {
-    try {
-      print('Deleting category with ID: $id');
-
-      final response = await http.delete(Uri.parse('$baseUrl/$id'));
-      print('Delete category response: ${response.statusCode}');
-
-      if (response.statusCode == 200 || response.statusCode == 204) {
-        _categories.removeWhere((c) => c.id == id);
-        notifyListeners();
-      } else {
-        throw Exception('Gagal menghapus kategori: ${response.statusCode} - ${response.body}');
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final userId = authService.userId;
+      
+      if (userId == null) {
+        throw Exception('User not logged in');
       }
+
+      await _apiService.deleteCategory(categoryId, userId);
+      
+      _categories.removeWhere((c) => c.categoryId == categoryId);
+      notifyListeners();
     } catch (e) {
-      print('Delete Category Error: $e');
-      throw Exception('Gagal terhubung ke server: $e');
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
     }
   }
 
-  Future<void> editCategory(Category category, String newName) async {
-    if (category.id == null) {
-      throw Exception('Category ID tidak boleh null');
-    }
-
-    try {
-      print('Editing category with ID: ${category.id}, new name: $newName');
-
-      final response = await http.put(
-        Uri.parse('$baseUrl/${category.id}'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'name': newName,
-          'expense': category.isExpense,
-        }),
-      );
-
-      print('Edit category response: ${response.statusCode} - ${response.body}');
-
-      if (response.statusCode == 200) {
-        final updatedCategory = Category.fromJson(json.decode(response.body));
-        final index = _categories.indexWhere((c) => c.id == category.id);
-        if (index != -1) {
-          _categories[index] = updatedCategory;
-          notifyListeners();
-        }
-      } else {
-        throw Exception('Gagal memperbarui kategori: ${response.statusCode} - ${response.body}');
-      }
-    } catch (e) {
-      print('Edit Category Error: $e');
-      throw Exception('Gagal terhubung ke server: $e');
-    }
+  // Clear all data (for logout)
+  void clearData() {
+    _categories.clear();
+    _error = null;
+    notifyListeners();
   }
-
-  List<Category> getExpenseCategories() {
-    return _categories.where((category) => category.isExpense).toList();
-  }
-
-  List<Category> getIncomeCategories() {
-    return _categories.where((category) => !category.isExpense).toList();
-  }
-
-  // Metode untuk menguji koneksi ke backend
-  Future<void> testBackendConnection() async {
-    try {
-      print('Testing connection to backend...');
-
-      final response = await http.get(Uri.parse(baseUrl));
-      print('Test connection response: ${response.statusCode}');
-      print('Response headers: ${response.headers}');
-      print('Response body preview: ${response.body.substring(0, min(100, response.body.length))}...');
-
-      print('Connection test completed successfully');
-    } catch (e) {
-      print('Connection test failed: $e');
-    }
-  }
-}
-
-// Helper function untuk min
-int min(int a, int b) {
-  return a < b ? a : b;
 }

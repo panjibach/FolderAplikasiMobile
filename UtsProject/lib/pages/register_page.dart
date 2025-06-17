@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:utsproject/pages/login_page.dart';
-import 'package:utsproject/pages/main_page.dart';
+import 'package:provider/provider.dart';
+import '../services/auth_services.dart';
+import '../services/api_service.dart';
+import 'login_page.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({Key? key}) : super(key: key);
@@ -18,7 +20,6 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
   final _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
-  bool _isLoading = false;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
@@ -48,27 +49,139 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
 
   void _register() async {
     if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
+      final authService = Provider.of<AuthService>(context, listen: false);
+      
+      try {
+        // Show loading dialog
+        _showLoadingDialog();
 
-      // Simulate registration delay
-      await Future.delayed(const Duration(seconds: 2));
-
-      // TODO: Implement actual registration logic here
-      // For now, we'll just navigate to the main page
-
-      setState(() {
-        _isLoading = false;
-      });
-
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const MainPage()),
+        final success = await authService.register(
+          name: _nameController.text.trim(),
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
         );
+
+        // Hide loading dialog
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+
+        if (success && mounted) {
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Registration successful! Please login with your credentials.',
+                      style: GoogleFonts.poppins(),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+
+          // ✅ PERBAIKAN: Arahkan ke login page instead of main page
+          // Clear the auth state first to ensure clean login
+          await authService.logout();
+          
+          // Navigate to login page with the registered email pre-filled
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => LoginPage(
+                prefilledEmail: _emailController.text.trim(),
+              ),
+            ),
+          );
+        }
+      } catch (e) {
+        // Hide loading dialog if still showing
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+
+        if (mounted) {
+          String errorMessage = 'Registration failed. Please try again.';
+          
+          if (e is ApiException) {
+            errorMessage = e.message;
+          } else if (e.toString().contains('Email sudah digunakan')) {
+            errorMessage = 'This email is already registered. Please use a different email.';
+          } else if (e.toString().contains('network')) {
+            errorMessage = 'Network error. Please check your internet connection.';
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      errorMessage,
+                      style: GoogleFonts.poppins(),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
       }
     }
+  }
+
+  void _showLoadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Creating your account...',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -121,6 +234,7 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
                         // Name field
                         TextFormField(
                           controller: _nameController,
+                          textCapitalization: TextCapitalization.words,
                           decoration: InputDecoration(
                             labelText: "Full Name",
                             hintText: "Enter your full name",
@@ -140,8 +254,14 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
                             ),
                           ),
                           validator: (value) {
-                            if (value == null || value.isEmpty) {
+                            if (value == null || value.trim().isEmpty) {
                               return "Please enter your name";
+                            }
+                            if (value.trim().length < 2) {
+                              return "Name must be at least 2 characters";
+                            }
+                            if (value.trim().length > 50) {
+                              return "Name must be less than 50 characters";
                             }
                             return null;
                           },
@@ -170,10 +290,10 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
                             ),
                           ),
                           validator: (value) {
-                            if (value == null || value.isEmpty) {
+                            if (value == null || value.trim().isEmpty) {
                               return "Please enter your email";
                             }
-                            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value.trim())) {
                               return "Please enter a valid email";
                             }
                             return null;
@@ -186,7 +306,7 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
                           obscureText: _obscurePassword,
                           decoration: InputDecoration(
                             labelText: "Password",
-                            hintText: "Create a password",
+                            hintText: "Create a password (min. 6 characters)",
                             prefixIcon: Icon(
                               Icons.lock_outline,
                               color: Colors.deepPurple[400],
@@ -273,38 +393,42 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
                         ),
                         const SizedBox(height: 30),
                         // Register button
-                        SizedBox(
-                          width: double.infinity,
-                          height: 55,
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _register,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.deepPurple[700],
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              elevation: 2,
-                            ),
-                            child: _isLoading
-                                ? SizedBox(
-                              height: 24,
-                              width: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
+                        Consumer<AuthService>(
+                          builder: (context, authService, child) {
+                            return SizedBox(
+                              width: double.infinity,
+                              height: 55,
+                              child: ElevatedButton(
+                                onPressed: authService.isLoading ? null : _register,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.deepPurple[700],
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  elevation: 2,
+                                ),
+                                child: authService.isLoading
+                                    ? const SizedBox(
+                                  height: 24,
+                                  width: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                )
+                                    : Text(
+                                  "Create Account",
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
-                            )
-                                : Text(
-                              "Register",
-                              style: GoogleFonts.poppins(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
+                            );
+                          },
                         ),
                         const SizedBox(height: 20),
                         // Or divider
@@ -342,11 +466,28 @@ class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderSt
                           child: OutlinedButton.icon(
                             onPressed: () {
                               // TODO: Implement Google Sign Up
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Google Sign Up coming soon!',
+                                    style: GoogleFonts.poppins(),
+                                  ),
+                                  backgroundColor: Colors.orange,
+                                ),
+                              );
                             },
-                            icon: Image.network(
-                              'assets/image/img_1.png',
-                              height: 40,
-                              width: 40,
+                            icon: Container(
+                              width: 24,
+                              height: 24,
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.g_mobiledata,
+                                color: Colors.red,
+                                size: 20,
+                              ),
                             ),
                             label: Text(
                               "Sign up with Google",

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:utsproject/models/category.dart';
+import 'package:utsproject/models/category.dart' as CategoryModel;
 import 'package:utsproject/services/category_services.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -13,18 +13,16 @@ class CategoryPage extends StatefulWidget {
 }
 
 class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClientMixin, SingleTickerProviderStateMixin {
-  bool _isExpense = true; // switch ON = Expense, OFF = Income
-  bool get wantKeepAlive => true; // agar tetap aktif
+  bool _isExpense = true;
+  bool get wantKeepAlive => true;
 
   late AnimationController _animationController;
   late Animation<double> _animation;
-  late Future<void> _fetchCategoriesFuture; // Simpan future untuk FutureBuilder
-
+  late Future<void> _fetchCategoriesFuture;
 
   final TextEditingController _categoryController = TextEditingController();
 
   @override
-  // Add this method to the CategoryPageState class
   void refreshCategories() {
     final categoryService = Provider.of<CategoryService>(context, listen: false);
     setState(() {
@@ -44,7 +42,6 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
       curve: Curves.easeOutQuint,
     );
     _animationController.forward();
-    // Inisialisasi future di initState
     _fetchCategoriesFuture = Provider.of<CategoryService>(context, listen: false).fetchCategories();
   }
 
@@ -162,27 +159,24 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
                 if (_categoryController.text.isNotEmpty) {
                   try {
                     final categoryService = Provider.of<CategoryService>(context, listen: false);
-                    await categoryService.addCategory(
-                      Category(
-                        name: _categoryController.text,
-                        isExpense: _isExpense,
-                      ),
+                    await categoryService.createCategory(
+                      _categoryController.text,
+                      _isExpense,
                     );
                     Navigator.of(context).pop();
 
-                    // Show a snackbar for feedback
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Row(
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.check_circle,
                               color: Colors.white,
                             ),
                             const SizedBox(width: 10),
                             Text(
                               "${_categoryController.text} category added",
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -197,7 +191,6 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
                       ),
                     );
 
-                    // Perbarui future untuk memicu pembaruan UI
                     setState(() {
                       _fetchCategoriesFuture = categoryService.fetchCategories();
                     });
@@ -205,8 +198,8 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          "Gagal menambahkan kategori: $e",
-                          style: TextStyle(
+                          "Failed to add category: $e",
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
                           ),
@@ -243,8 +236,8 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
     );
   }
 
-  void _editCategoryDialog(Category category) {
-    _categoryController.text = category.name;
+  void _editCategoryDialog(CategoryModel.Category category) {
+    _categoryController.text = category.categoryName;
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -348,25 +341,25 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
                 if (_categoryController.text.isNotEmpty) {
                   try {
                     final categoryService = Provider.of<CategoryService>(context, listen: false);
-                    await categoryService.editCategory(
-                      category,
+                    await categoryService.updateCategory(
+                      category.categoryId!,
                       _categoryController.text,
+                      category.isExpense,
                     );
                     Navigator.of(context).pop();
 
-                    // Show a snackbar for feedback
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Row(
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.check_circle,
                               color: Colors.white,
                             ),
                             const SizedBox(width: 10),
                             Text(
                               "Category updated to ${_categoryController.text}",
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -381,7 +374,6 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
                       ),
                     );
 
-                    // Perbarui future untuk memicu pembaruan UI
                     setState(() {
                       _fetchCategoriesFuture = categoryService.fetchCategories();
                     });
@@ -389,8 +381,8 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          "Gagal memperbarui kategori: $e",
-                          style: TextStyle(
+                          "Failed to update category: $e",
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
                           ),
@@ -427,7 +419,7 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
     );
   }
 
-  void _confirmDelete(Category category) {
+  void _confirmDelete(CategoryModel.Category category) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -497,7 +489,7 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      category.name,
+                      category.categoryName,
                       style: GoogleFonts.poppins(
                         fontWeight: FontWeight.w600,
                         fontSize: 15,
@@ -534,50 +526,44 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
               onPressed: () async {
                 try {
                   final categoryService = Provider.of<CategoryService>(context, listen: false);
-                  if (category.id != null) {
-                    await categoryService.deleteCategory(category.id!);
-                    Navigator.of(context).pop();
+                  await categoryService.deleteCategory(category.categoryId!);
+                  Navigator.of(context).pop();
 
-                    // Show a snackbar for feedback
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Row(
-                          children: [
-                            const Icon(
-                              Icons.check_circle,
-                              color: Colors.white,
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          const Icon(
+                            Icons.check_circle,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            "${category.categoryName} category deleted",
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
                             ),
-                            const SizedBox(width: 10),
-                            Text(
-                              "${category.name} category deleted",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                        backgroundColor: Colors.red.shade400,
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
+                          ),
+                        ],
                       ),
-                    );
+                      backgroundColor: Colors.red.shade400,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  );
 
-                    // Perbarui future untuk memicu pembaruan UI
-                    setState(() {
-                      _fetchCategoriesFuture = categoryService.fetchCategories();
-                    });
-                  } else {
-                    throw Exception("Category ID not found");
-                  }
+                  setState(() {
+                    _fetchCategoriesFuture = categoryService.fetchCategories();
+                  });
                 } catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
-                        "Gagal menghapus kategori: $e",
-                        style: TextStyle(
+                        "Failed to delete category: $e",
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
                         ),
@@ -615,7 +601,7 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // Required for AutomaticKeepAliveClientMixin
+    super.build(context);
     final categoryService = Provider.of<CategoryService>(context);
 
     return Column(
@@ -641,105 +627,98 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
             ],
           ),
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 30),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Removed the "Kategori" title since it's already in the AppBar
-              // Custom toggle switch
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                child: Row(
-                  children: [
-                    // Expense tab
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () {
-                          if (!_isExpense) {
-                            setState(() {
-                              _isExpense = true;
-                            });
-                            HapticFeedback.lightImpact();
-                            _animationController.reset();
-                            _animationController.forward();
-                          }
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          decoration: BoxDecoration(
-                            color: _isExpense ? Colors.white : Colors.transparent,
-                            borderRadius: BorderRadius.circular(25),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(30),
+            ),
+            child: Row(
+              children: [
+                // Expense tab
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      if (!_isExpense) {
+                        setState(() {
+                          _isExpense = true;
+                        });
+                        HapticFeedback.lightImpact();
+                        _animationController.reset();
+                        _animationController.forward();
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: _isExpense ? Colors.white : Colors.transparent,
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.arrow_upward,
+                            size: 18,
+                            color: _isExpense ? Colors.red : Colors.white,
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.arrow_upward,
-                                size: 18,
-                                color: _isExpense ? Colors.red : Colors.white,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                "Expense",
-                                style: GoogleFonts.poppins(
-                                  fontWeight: _isExpense ? FontWeight.w600 : FontWeight.w500,
-                                  fontSize: 15,
-                                  color: _isExpense ? Colors.deepPurple.shade700 : Colors.white,
-                                ),
-                              ),
-                            ],
+                          const SizedBox(width: 8),
+                          Text(
+                            "Expense",
+                            style: GoogleFonts.poppins(
+                              fontWeight: _isExpense ? FontWeight.w600 : FontWeight.w500,
+                              fontSize: 15,
+                              color: _isExpense ? Colors.deepPurple.shade700 : Colors.white,
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
-                    // Income tab
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () {
-                          if (_isExpense) {
-                            setState(() {
-                              _isExpense = false;
-                            });
-                            HapticFeedback.lightImpact();
-                            _animationController.reset();
-                            _animationController.forward();
-                          }
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          decoration: BoxDecoration(
-                            color: !_isExpense ? Colors.white : Colors.transparent,
-                            borderRadius: BorderRadius.circular(25),
+                  ),
+                ),
+                // Income tab
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      if (_isExpense) {
+                        setState(() {
+                          _isExpense = false;
+                        });
+                        HapticFeedback.lightImpact();
+                        _animationController.reset();
+                        _animationController.forward();
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: !_isExpense ? Colors.white : Colors.transparent,
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.arrow_downward,
+                            size: 18,
+                            color: !_isExpense ? Colors.green : Colors.white,
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.arrow_downward,
-                                size: 18,
-                                color: !_isExpense ? Colors.green : Colors.white,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                "Income",
-                                style: GoogleFonts.poppins(
-                                  fontWeight: !_isExpense ? FontWeight.w600 : FontWeight.w500,
-                                  fontSize: 15,
-                                  color: !_isExpense ? Colors.deepPurple.shade700 : Colors.white,
-                                ),
-                              ),
-                            ],
+                          const SizedBox(width: 8),
+                          Text(
+                            "Income",
+                            style: GoogleFonts.poppins(
+                              fontWeight: !_isExpense ? FontWeight.w600 : FontWeight.w500,
+                              fontSize: 15,
+                              color: !_isExpense ? Colors.deepPurple.shade700 : Colors.white,
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         // List kategori dengan FutureBuilder
@@ -747,11 +726,9 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
           child: FutureBuilder(
             future: _fetchCategoriesFuture,
             builder: (context, AsyncSnapshot snapshot) {
-              print('FutureBuilder State: ${snapshot.connectionState}');
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
               } else if (snapshot.hasError) {
-                print('FutureBuilder Error: ${snapshot.error}');
                 return Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -759,7 +736,7 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
                       const Icon(Icons.error_outline, color: Colors.red, size: 60),
                       const SizedBox(height: 16),
                       Text(
-                        "Gagal mengambil data kategori. Silakan coba lagi.",
+                        "Failed to load categories. Please try again.",
                         style: GoogleFonts.poppins(fontSize: 16, color: Colors.red),
                         textAlign: TextAlign.center,
                       ),
@@ -770,7 +747,6 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
                             _fetchCategoriesFuture = categoryService.fetchCategories();
                           });
                         },
-                        child: Text("Coba Lagi", style: GoogleFonts.poppins()),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.deepPurple,
                           foregroundColor: Colors.white,
@@ -778,112 +754,112 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
+                        child: Text("Try Again", style: GoogleFonts.poppins()),
                       ),
                     ],
                   ),
                 );
               } else {
-                print('FutureBuilder Data Loaded: ${categoryService.categories.length} categories');
                 final categories = _isExpense
                     ? categoryService.getExpenseCategories()
                     : categoryService.getIncomeCategories();
 
                 return categories.isEmpty
                     ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 80),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.deepPurple.withOpacity(0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.category_outlined,
-                            size: 60,
-                            color: Colors.deepPurple[300],
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        Text(
-                          "No categories yet",
-                          style: GoogleFonts.poppins(
-                            fontSize: 20,
-                            color: Colors.grey[800],
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          "Tap + to add a new category",
-                          style: GoogleFonts.poppins(
-                            fontSize: 15,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-                    : FadeTransition(
-                  opacity: _animation,
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0, 0.1),
-                      end: Offset.zero,
-                    ).animate(_animation),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 80),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(
-                                "${_isExpense ? 'Expense' : 'Income'} Categories",
-                                style: GoogleFonts.poppins(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey[800],
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: Colors.deepPurple.withOpacity(0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.category_outlined,
+                                  size: 60,
+                                  color: Colors.deepPurple[300],
                                 ),
                               ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.deepPurple[50],
-                                  borderRadius: BorderRadius.circular(20),
+                              const SizedBox(height: 24),
+                              Text(
+                                "No categories yet",
+                                style: GoogleFonts.poppins(
+                                  fontSize: 20,
+                                  color: Colors.grey[800],
+                                  fontWeight: FontWeight.w600,
                                 ),
-                                child: Text(
-                                  "${categories.length} items",
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.deepPurple[700],
-                                  ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                "Tap + to add a new category",
+                                style: GoogleFonts.poppins(
+                                  fontSize: 15,
+                                  color: Colors.grey[600],
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 16),
-                          Expanded(
-                            child: ListView.separated(
-                              padding: const EdgeInsets.only(bottom: 100),
-                              itemCount: categories.length,
-                              itemBuilder: (context, index) {
-                                return categoryCard(categories[index], index);
-                              },
-                              separatorBuilder: (context, index) => const SizedBox(height: 8),
+                        ),
+                      )
+                    : FadeTransition(
+                        opacity: _animation,
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(0, 0.1),
+                            end: Offset.zero,
+                          ).animate(_animation),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      "${_isExpense ? 'Expense' : 'Income'} Categories",
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey[800],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.deepPurple[50],
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        "${categories.length} items",
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.deepPurple[700],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                Expanded(
+                                  child: ListView.separated(
+                                    padding: const EdgeInsets.only(bottom: 100),
+                                    itemCount: categories.length,
+                                    itemBuilder: (context, index) {
+                                      return categoryCard(categories[index], index);
+                                    },
+                                    separatorBuilder: (context, index) => const SizedBox(height: 8),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
+                        ),
+                      );
               }
             },
           ),
@@ -893,7 +869,7 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
   }
 
   // Card kategori
-  Widget categoryCard(Category category, int index) {
+  Widget categoryCard(CategoryModel.Category category, int index) {
     final Color cardColor = category.isExpense
         ? Colors.red.withOpacity(0.1)
         : Colors.green.withOpacity(0.1);
@@ -919,7 +895,6 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
           color: Colors.transparent,
           child: InkWell(
             onTap: () {
-              // Optional: Add action when tapping the card
               HapticFeedback.lightImpact();
             },
             splashColor: Colors.deepPurple.withOpacity(0.1),
@@ -948,7 +923,7 @@ class CategoryPageState extends State<CategoryPage> with AutomaticKeepAliveClien
                   // Category name
                   Expanded(
                     child: Text(
-                      category.name,
+                      category.categoryName,
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,

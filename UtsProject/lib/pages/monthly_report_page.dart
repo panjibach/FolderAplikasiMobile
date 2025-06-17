@@ -430,13 +430,13 @@ class _MonthlyReportPageState extends State<MonthlyReportPage> with SingleTicker
     }
 
     // Sort transactions by date (newest first)
-    transactions.sort((a, b) => b.date.compareTo(a.date));
+    transactions.sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
 
     // Group transactions by date
     final Map<String, List<Transaction>> groupedTransactions = {};
     for (var tx in transactions) {
       final dateFormat = DateFormat('yyyy-MM-dd');
-      final dateKey = dateFormat.format(tx.date);
+      final dateKey = dateFormat.format(tx.transactionDate);
 
       if (!groupedTransactions.containsKey(dateKey)) {
         groupedTransactions[dateKey] = [];
@@ -557,17 +557,17 @@ class _MonthlyReportPageState extends State<MonthlyReportPage> with SingleTicker
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          tx.category.name,
+                          tx.category.categoryName,
                           style: GoogleFonts.poppins(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
                             color: Colors.black87,
                           ),
                         ),
-                        if (tx.description.isNotEmpty) ...[
+                        if (tx.transactionDescription != null && tx.transactionDescription!.isNotEmpty) ...[
                           const SizedBox(height: 4),
                           Text(
-                            tx.description,
+                            tx.transactionDescription!,
                             style: GoogleFonts.poppins(
                               fontSize: 13,
                               color: Colors.grey[600],
@@ -666,10 +666,46 @@ class _MonthlyReportPageState extends State<MonthlyReportPage> with SingleTicker
                                       ),
                                     ),
                                     ElevatedButton(
-                                      onPressed: () {
-                                        transactionService.removeTransaction(tx.id);
+                                      onPressed: () async {
                                         Navigator.pop(context);
-                                        setState(() {});
+                                        
+                                        try {
+                                          // Show loading
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Deleting transaction...'),
+                                              duration: Duration(seconds: 1),
+                                            ),
+                                          );
+
+                                          // ✅ PERBAIKAN: Gunakan deleteTransaction bukan removeTransaction
+                                          if (tx.transactionId != null) {
+                                            await transactionService.deleteTransaction(tx.transactionId!);
+                                          }
+
+                                          // Refresh data
+                                          await transactionService.fetchTransactions();
+
+                                          // Show success
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text('Transaction deleted successfully'),
+                                                backgroundColor: Colors.green,
+                                              ),
+                                            );
+                                          }
+                                        } catch (e) {
+                                          // Show error
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text('Error deleting transaction: $e'),
+                                                backgroundColor: Colors.red,
+                                              ),
+                                            );
+                                          }
+                                        }
                                       },
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: Colors.red,

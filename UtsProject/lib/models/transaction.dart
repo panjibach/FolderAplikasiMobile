@@ -1,81 +1,124 @@
-import 'package:utsproject/models/category.dart';
 import 'package:intl/intl.dart';
-import 'package:decimal/decimal.dart';
+import 'category.dart' as CategoryModel;
 
 class Transaction {
-  final String id; // Tetap gunakan String di Flutter
-  final Decimal amount; // Format tampilan untuk UI
-  final Category category;
-  final DateTime date;
-  final String description;
-  final bool deleted;
+  final int? transactionId;
+  final double transactionAmount;
+  final String? transactionDescription;
+  final DateTime transactionDate;
+  final int categoryId;
+  final int? userId;
+  final bool isDeleted;
+  final String? transactionType;
+  
+  // Add these properties for UI compatibility
+  CategoryModel.Category? _category;
 
   Transaction({
-    required this.id,
-    required this.amount,
-    required this.category,
-    required this.date,
-    required this.description,
-    this.deleted = false,
-  });
+    this.transactionId,
+    required this.transactionAmount,
+    this.transactionDescription,
+    required this.transactionDate,
+    required this.categoryId,
+    this.userId,
+    this.isDeleted = false,
+    this.transactionType,
+    CategoryModel.Category? category,
+  }) : _category = category;
+
+  // Add getters for backward compatibility
+  int? get id => transactionId;
+  String get description => transactionDescription ?? '';
+  DateTime get date => transactionDate;
+  CategoryModel.Category get category => _category ?? CategoryModel.Category(
+    categoryId: categoryId,
+    categoryName: 'Unknown Category',
+    isExpense: true,
+    isDeleted: false,
+  );
+
+  // ✅ PERBAIKAN: Tambahkan getter type yang hilang
+  String get type {
+    if (_category != null) {
+      return _category!.isExpense ? 'expense' : 'income';
+    }
+    // Fallback jika category tidak ada
+    return 'expense';
+  }
+
+  // Add isExpense getter based on category
+  bool get isExpense => _category?.isExpense ?? true;
+
+  // Tambahkan getter categoryName untuk kompatibilitas dengan UI
+  String get categoryName => _category?.categoryName ?? 'Unknown Category';
+  
+  // Tambahkan getter name untuk kompatibilitas dengan UI
+  String get name => categoryName;
+
+  factory Transaction.fromJson(Map<String, dynamic> json) {
+    return Transaction(
+      transactionId: json['transactionId'],
+      transactionAmount: (json['transactionAmount'] as num).toDouble(),
+      transactionDescription: json['transactionDescription'],
+      transactionDate: DateTime.parse(json['transactionDate']),
+      categoryId: json['categoryId'],
+      userId: json['userId'],
+      isDeleted: json['isDeleted'] ?? false,
+      transactionType: json['transactionType'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'transactionId': transactionId,
+      'transactionAmount': transactionAmount,
+      'transactionDescription': transactionDescription,
+      'transactionDate': transactionDate.toIso8601String().split('T')[0], // Format: YYYY-MM-DD
+      'categoryId': categoryId,
+      'userId': userId,
+      'isDeleted': isDeleted,
+      'transactionType': transactionType,
+    };
+  }
 
   String get formattedAmount {
-    final formatter = NumberFormat.currency(
-      locale: 'id_ID',
+    return NumberFormat.currency(
+      locale: 'id',
       symbol: 'Rp ',
-      decimalDigits: 2,
+      decimalDigits: 0,
+    ).format(transactionAmount);
+  }
+
+  String get formattedDate {
+    return DateFormat('dd MMM yyyy', 'id').format(transactionDate);
+  }
+
+  Transaction copyWith({
+    int? transactionId,
+    double? transactionAmount,
+    String? transactionDescription,
+    DateTime? transactionDate,
+    int? categoryId,
+    int? userId,
+    bool? isDeleted,
+    String? transactionType,
+    CategoryModel.Category? category,
+  }) {
+    return Transaction(
+      transactionId: transactionId ?? this.transactionId,
+      transactionAmount: transactionAmount ?? this.transactionAmount,
+      transactionDescription: transactionDescription ?? this.transactionDescription,
+      transactionDate: transactionDate ?? this.transactionDate,
+      categoryId: categoryId ?? this.categoryId,
+      userId: userId ?? this.userId,
+      isDeleted: isDeleted ?? this.isDeleted,
+      transactionType: transactionType ?? this.transactionType,
+      category: category ?? this._category,
     );
-    // Directly format the Decimal to avoid precision issues with double
-    return formatter.format(amount.toDouble());
   }
 
-  /// Create object from JSON (backend -> Flutter)
-  factory Transaction.fromJson(Map<String, dynamic> json) {
-    try {
-      return Transaction(
-        id: json['id']?.toString() ?? '',
-        amount: Decimal.tryParse(json['amount']?.toString() ?? '0') ?? Decimal.zero,
-        category: json['category'] != null
-            ? Category.fromJson(json['category'])
-            : Category(id: 0, name: 'Unknown', isExpense: false),
-        date: DateTime.tryParse(json['date']?.toString() ?? '') ?? DateTime.now(),
-        description: json['description']?.toString() ?? '',
-        deleted: json['deleted'] as bool? ?? false,
-      );
-    } catch (e) {
-      print('Error creating Transaction from JSON: $e');
-      rethrow;
-    }
+  // Method to set category after fetching from CategoryService
+  void setCategory(CategoryModel.Category category) {
+    _category = category;
   }
-
-  /// Convert object to JSON (Flutter -> backend)
-  Map<String, dynamic> toJson() {
-    try {
-      return {
-        'id': id,
-        'amount': amount.toString(), // Backend expects BigDecimal as string
-        'category': {'id': category.id},
-        'date': DateFormat('yyyy-MM-dd').format(date),
-        'description': description,
-        'deleted': deleted,
-      };
-    } catch (e) {
-      print('Error converting Transaction to JSON: $e');
-      return {};
-    }
-  }
-
-  @override
-  String toString() {
-    return 'Transaction{id: $id, amount: $formattedAmount, category: ${category.name}, date: ${DateFormat('yyyy-MM-dd').format(date)}, description: $description, deleted: $deleted}';
-  }
-
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is Transaction && other.id == id;
-  }
-
-  @override
-  int get hashCode => id.hashCode;
 }

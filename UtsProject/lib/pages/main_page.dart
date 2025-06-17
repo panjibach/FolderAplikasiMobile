@@ -44,6 +44,11 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     );
 
     _fabAnimationController.forward();
+
+    // Auto-fetch data saat MainPage pertama kali dibuka
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshAllData();
+    });
   }
 
   @override
@@ -57,6 +62,34 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
       HomePage(selectedDate: selectedDate),
       CategoryPage(key: _categoryPageKey),
     ];
+  }
+
+  // ✅ PERBAIKAN: Ubah dari void ke Future<void>
+  Future<void> _refreshAllData() async {
+    try {
+      final categoryService = Provider.of<CategoryService>(context, listen: false);
+      final transactionService = Provider.of<TransactionService>(context, listen: false);
+
+      print('🔄 Refreshing all data...');
+
+      // Fetch categories first
+      await categoryService.fetchCategories();
+      print('✅ Categories fetched: ${categoryService.categories.length}');
+
+      // Then fetch transactions
+      await transactionService.fetchTransactions();
+      print('✅ Transactions fetched: ${transactionService.transactions.length}');
+
+      // Update HomePage dengan data terbaru
+      if (mounted) {
+        setState(() {
+          _children[0] = HomePage(selectedDate: selectedDate);
+        });
+      }
+
+    } catch (e) {
+      print('❌ Error refreshing data: $e');
+    }
   }
 
   void onTapTapped(int index) {
@@ -103,7 +136,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
         elevation: 0,
         centerTitle: false,
         actions: [
-          // Profile button
+          // Profile button - hanya tampil di halaman Categories
           IconButton(
             icon: Container(
               padding: const EdgeInsets.all(6),
@@ -122,23 +155,48 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
           // Refresh button
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              // Refresh categories using the public method
-              _categoryPageKey.currentState?.refreshCategories();
+            onPressed: () async {
+              // ✅ PERBAIKAN: Proper async handling
+              try {
+                // Refresh categories using the public method
+                _categoryPageKey.currentState?.refreshCategories();
 
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Categories refreshed!',
-                    style: GoogleFonts.poppins(),
-                  ),
-                  backgroundColor: Colors.deepPurple,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              );
+                // Also refresh transactions
+                await _refreshAllData();
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Data refreshed!',
+                        style: GoogleFonts.poppins(),
+                      ),
+                      backgroundColor: Colors.deepPurple,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  );
+                }
+              } catch (e) {
+                print('❌ Error during manual refresh: $e');
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Failed to refresh data',
+                        style: GoogleFonts.poppins(),
+                      ),
+                      backgroundColor: Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  );
+                }
+              }
             },
           ),
           IconButton(
@@ -178,15 +236,21 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
                 MaterialPageRoute(
                   builder: (context) => TransactionPage(initialDate: selectedDate),
                 ),
-              ).then((_) {
-                // Force refresh when returning from transaction page
-                setState(() {
-                  // Buat instance baru dari HomePage dengan tanggal yang sama
-                  _children[0] = HomePage(selectedDate: selectedDate);
-                });
+              ).then((_) async {
+                // ✅ PERBAIKAN: Proper async handling in then()
+                print('🔄 Refreshing data after transaction creation...');
 
-                // Debug print all transactions after adding
-                transactionService.debugPrintAllTransactions();
+                try {
+                  await _refreshAllData();
+                  print('✅ Data refreshed successfully after transaction creation');
+
+                  // Debug print all transactions after adding
+                  final transactionService = Provider.of<TransactionService>(context, listen: false);
+                  transactionService.debugPrintAllTransactions();
+
+                } catch (e) {
+                  print('❌ Error refreshing data after transaction creation: $e');
+                }
               });
             } else if (currentIndex == 1) {
               _categoryPageKey.currentState?.openDialog();
@@ -197,47 +261,9 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
           child: const Icon(Icons.add, color: Colors.white, size: 28),
         ),
       ),
-      body: Stack(
-        children: [
-          IndexedStack(
-            index: currentIndex,
-            children: _children,
-          ),
-          // Only show profile button on home page
-          if (currentIndex == 0)
-            Positioned(
-              top: 8,
-              right: 8,
-              child: SafeArea(
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: _navigateToProfile,
-                    borderRadius: BorderRadius.circular(30),
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.person_rounded,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
+      body: IndexedStack(
+        index: currentIndex,
+        children: _children,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: Container(

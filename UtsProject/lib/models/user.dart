@@ -1,67 +1,92 @@
-import 'package:utsproject/models/category.dart';
-import 'package:intl/intl.dart';
+class UserModel {
+  final int userId;
+  final String userName;
+  final String userEmail;
+  final String? profileUrl;
+  final bool isDeleted;
 
-class User {
-  String? id; // Menggunakan String untuk ID karena di Flutter lebih fleksibel
-  String? nama;
-  String? email;
-  String? password;
-  String? profile;
-  bool deleted;
-
-  // Constructor
-  User({
-    this.id,
-    this.nama,
-    this.email,
-    this.password,
-    this.profile,
-    this.deleted = false,
+  UserModel({
+    required this.userId,
+    required this.userName,
+    required this.userEmail,
+    this.profileUrl,
+    required this.isDeleted,
   });
 
-  // Factory constructor untuk membuat objek dari JSON
-  factory User.fromJson(Map<String, dynamic> json) {
-    // Debug log untuk melihat data yang diterima
-    print('Parsing user JSON: $json');
-
-    try {
-      return User(
-        id: json['id']?.toString(),
-        nama: json['nama'],
-        email: json['email'],
-        profile: json['profile'] ?? 'default.jpg',
-        deleted: json['deleted'] ?? false,
-      );
-    } catch (e) {
-      print('Error membuat User dari JSON: $e');
-      throw e; // Re-throw untuk debugging
-    }
+  factory UserModel.fromJson(Map<String, dynamic> json) {
+    return UserModel(
+      userId: json['userId'],
+      userName: json['userName'],
+      userEmail: json['userEmail'],
+      profileUrl: json['profileUrl'],
+      isDeleted: json['isDeleted'] ?? false,
+    );
   }
 
-  // Method untuk mengkonversi objek ke JSON
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
-      'nama': nama,
-      'email': email,
-      'password': password, // Perhatian: password dikirim ke server
-      'profile': profile ?? 'default.jpg',
-      'deleted': deleted,
+      'userId': userId,
+      'userName': userName,
+      'userEmail': userEmail,
+      'profileUrl': profileUrl,
+      'isDeleted': isDeleted,
     };
   }
+}
 
-  // Method untuk mengkonversi objek ke JSON untuk update (tanpa password)
-  Map<String, dynamic> toJsonForUpdate() {
+class LoginRequest {
+  final String userEmail;
+  final String userPassword;
+
+  LoginRequest({
+    required this.userEmail,
+    required this.userPassword,
+  });
+
+  Map<String, dynamic> toJson() {
     return {
-      'id': id,
-      'nama': nama,
-      'email': email,
-      'profile': profile ?? 'default.jpg',
+      'userEmail': userEmail,
+      'userPassword': userPassword,
     };
   }
+}
 
-  @override
-  String toString() {
-    return 'User{id: $id, nama: $nama, email: $email, profile: $profile}';
+class RegisterRequest {
+  final String userName;
+  final String userEmail;
+  final String userPassword;
+  final String? userProfile;
+
+  RegisterRequest({
+    required this.userName,
+    required this.userEmail,
+    required this.userPassword,
+    this.userProfile,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'userName': userName,
+      'userEmail': userEmail,
+      'userPassword': userPassword,
+      'userProfile': userProfile,
+    };
+  }
+}
+
+class LoginResponse {
+  final UserModel user;
+  final String token;
+
+  LoginResponse({
+    required this.user,
+    required this.token,
+  });
+
+  factory LoginResponse.fromJson(Map<String, dynamic> json) {
+    return LoginResponse(
+      user: UserModel.fromJson(json['user']),
+      token: json['token'],
+    );
   }
 }

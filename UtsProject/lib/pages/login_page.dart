@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:utsproject/pages/register_page.dart';
-import 'package:utsproject/pages/forgot_password_page.dart';
-import 'package:utsproject/pages/main_page.dart';
+import 'package:provider/provider.dart';
+import '../services/auth_services.dart';
+import '../services/api_service.dart';
+import 'register_page.dart';
+import 'main_page.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({Key? key}) : super(key: key);
+  final String? prefilledEmail;
+  
+  const LoginPage({Key? key, this.prefilledEmail}) : super(key: key);
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -16,13 +20,19 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
-  bool _isLoading = false;
+  bool _rememberMe = false;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
+    
+    // ✅ PERBAIKAN: Set email yang sudah diisi dari register page
+    if (widget.prefilledEmail != null) {
+      _emailController.text = widget.prefilledEmail!;
+    }
+    
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
@@ -44,27 +54,127 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
 
   void _login() async {
     if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
+      final authService = Provider.of<AuthService>(context, listen: false);
+      
+      try {
+        // Show loading dialog
+        _showLoadingDialog();
 
-      // Simulate login delay
-      await Future.delayed(const Duration(seconds: 2));
-
-      // TODO: Implement actual authentication logic here
-      // For now, we'll just navigate to the main page
-
-      setState(() {
-        _isLoading = false;
-      });
-
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const MainPage()),
+        final success = await authService.login(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
         );
+
+        // Hide loading dialog
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+
+        if (success && mounted) {
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Welcome back!',
+                    style: GoogleFonts.poppins(),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+
+          // Navigate to main page
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const MainPage()),
+          );
+        }
+      } catch (e) {
+        // Hide loading dialog if still showing
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+
+        if (mounted) {
+          String errorMessage = 'Login failed. Please check your credentials.';
+          
+          if (e is ApiException) {
+            errorMessage = e.message;
+          } else if (e.toString().contains('Invalid credentials')) {
+            errorMessage = 'Invalid email or password. Please try again.';
+          } else if (e.toString().contains('network')) {
+            errorMessage = 'Network error. Please check your internet connection.';
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      errorMessage,
+                      style: GoogleFonts.poppins(),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
       }
     }
+  }
+
+  void _showLoadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Signing you in...',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -81,33 +191,9 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 40),
-                  // App logo
-                  Center(
-                    child: Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.deepPurple.withOpacity(0.2),
-                            blurRadius: 15,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        Icons.account_balance_wallet,
-                        size: 40,
-                        color: Colors.deepPurple[700],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 40),
-                  // Welcome text
+                  // Welcome back text
                   Text(
-                    "Welcome Back",
+                    "Welcome Back!",
                     style: GoogleFonts.poppins(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
@@ -122,6 +208,40 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                       color: Colors.grey[600],
                     ),
                   ),
+                  
+                  // ✅ TAMBAHAN: Show welcome message jika dari register
+                  if (widget.prefilledEmail != null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle_outline,
+                            color: Colors.green.shade600,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Account created successfully! Please login to continue.',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: Colors.green.shade700,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  
                   const SizedBox(height: 40),
                   // Login form
                   Form(
@@ -151,10 +271,10 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                             ),
                           ),
                           validator: (value) {
-                            if (value == null || value.isEmpty) {
+                            if (value == null || value.trim().isEmpty) {
                               return "Please enter your email";
                             }
-                            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value.trim())) {
                               return "Please enter a valid email";
                             }
                             return null;
@@ -200,69 +320,96 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                             if (value == null || value.isEmpty) {
                               return "Please enter your password";
                             }
-                            if (value.length < 6) {
-                              return "Password must be at least 6 characters";
-                            }
                             return null;
                           },
                         ),
-                        const SizedBox(height: 12),
-                        // Forgot password
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const ForgotPasswordPage(),
+                        const SizedBox(height: 16),
+                        // Remember me and forgot password
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Checkbox(
+                                  value: _rememberMe,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _rememberMe = value ?? false;
+                                    });
+                                  },
+                                  activeColor: Colors.deepPurple[700],
                                 ),
-                              );
-                            },
-                            child: Text(
-                              "Forgot Password?",
-                              style: GoogleFonts.poppins(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.deepPurple[700],
+                                Text(
+                                  "Remember me",
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    color: Colors.grey[700],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                // TODO: Implement forgot password
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Forgot password feature coming soon!',
+                                      style: GoogleFonts.poppins(),
+                                    ),
+                                    backgroundColor: Colors.orange,
+                                  ),
+                                );
+                              },
+                              child: Text(
+                                "Forgot Password?",
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.deepPurple[700],
+                                ),
                               ),
                             ),
-                          ),
+                          ],
                         ),
                         const SizedBox(height: 30),
                         // Login button
-                        SizedBox(
-                          width: double.infinity,
-                          height: 55,
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _login,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.deepPurple[700],
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              elevation: 2,
-                            ),
-                            child: _isLoading
-                                ? SizedBox(
-                              height: 24,
-                              width: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
+                        Consumer<AuthService>(
+                          builder: (context, authService, child) {
+                            return SizedBox(
+                              width: double.infinity,
+                              height: 55,
+                              child: ElevatedButton(
+                                onPressed: authService.isLoading ? null : _login,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.deepPurple[700],
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  elevation: 2,
+                                ),
+                                child: authService.isLoading
+                                    ? const SizedBox(
+                                  height: 24,
+                                  width: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                )
+                                    : Text(
+                                  "Sign In",
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
-                            )
-                                : Text(
-                              "Login",
-                              style: GoogleFonts.poppins(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
+                            );
+                          },
                         ),
                         const SizedBox(height: 20),
                         // Or divider
@@ -300,14 +447,31 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                           child: OutlinedButton.icon(
                             onPressed: () {
                               // TODO: Implement Google Sign In
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Google Sign In coming soon!',
+                                    style: GoogleFonts.poppins(),
+                                  ),
+                                  backgroundColor: Colors.orange,
+                                ),
+                              );
                             },
-                            icon: Image.network(
-                              'assets/image/img_1.png',
-                              height: 40,
-                              width: 40,
+                            icon: Container(
+                              width: 24,
+                              height: 24,
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.g_mobiledata,
+                                color: Colors.red,
+                                size: 20,
+                              ),
                             ),
                             label: Text(
-                              "Continue with Google",
+                              "Sign in with Google",
                               style: GoogleFonts.poppins(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w500,
@@ -323,7 +487,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                             ),
                           ),
                         ),
-                        const SizedBox(height: 30),
+                        const SizedBox(height: 40),
                         // Register link
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -337,7 +501,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                             ),
                             GestureDetector(
                               onTap: () {
-                                Navigator.push(
+                                Navigator.pushReplacement(
                                   context,
                                   MaterialPageRoute(
                                     builder: (context) => const RegisterPage(),
@@ -345,7 +509,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                                 );
                               },
                               child: Text(
-                                "Register",
+                                "Sign Up",
                                 style: GoogleFonts.poppins(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
